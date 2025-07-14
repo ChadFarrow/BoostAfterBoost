@@ -1,59 +1,58 @@
-# LIT Bot - Live Podcast Notifications
+# BoostAfterBoost - IRC to Nostr Bridge
 
 ## Repository Information
-- **Main Repository**: Forked from BoostBot
-- **Podcast Index**: https://github.com/Podcastindex-org
-- **Purpose**: PodPing integration for posting live podcast notifications to Nostr
+- **Purpose**: Monitor BoostAfterBoost bot messages in #BowlAfterBowl IRC channel and forward to Nostr
+- **IRC Server**: irc.zeronode.net
+- **Channel**: #BowlAfterBowl only
+- **Target Bot**: BoostAfterBoost
 
-## PodPing Integration
-- **Monitors**: Hive blockchain for PodPing events
-- **Filters**: Only processes events with `reason=live`
-- **Posts**: Live notifications to Nostr when shows go live
-- **Real-time**: Notifications within ~20 seconds of going live
-
-## Current Bot Configuration
-- **Only posts live events**: reason === 'live'
-- **Monitors Hive**: Uses @hiveio/dhive for blockchain monitoring
-- **Auto-extracts titles**: Attempts to extract show names from feed URLs
-- **Runs on port 3334**: Separate from BoostBot (port 3333)
+## Bot Configuration
+- **Read-only IRC**: Only monitors messages, never posts to IRC
+- **Monitors specific bot**: Only processes messages from BoostAfterBoost bot
+- **Posts to Nostr**: Forwards monitored messages to Nostr relays
+- **Runs on port 3334**: Separate from other bots
 
 ## Nostr Configuration
-- **Environment Variable**: `LIT_BOT_NSEC` (separate from BoostBot)
-- **Default Relays**: relay.damus.io, relay.nostr.band, relay.primal.net
-- **Post Format**: Live notification with show title and feed URL
+- **Environment Variable**: `NOSTR_NSEC`
+- **Default Relays**: relay.damus.io, relay.nostr.band, nostr.mom, relay.primal.net
+- **Post Format**: Direct message forwarding with BowlAfterBowl hashtags
 
 ## Key Features
-- Real-time PodPing monitoring via Hive blockchain
-- Automatic live podcast detection
-- Clean Nostr notifications for live shows
-- Separate identity from BoostBot
+- IRC message monitoring for specific bot
+- Read-only IRC connection (no posting to IRC)
+- Selective message filtering (BoostAfterBoost bot only)
+- Automatic Nostr forwarding
 - Health monitoring and status endpoints
 
 ## Bot Management Commands
 
 ### Starting the Bot
 ```bash
-cd /Users/chad-mini/Vibe/LIT_Bot
-PORT=3334 LIT_BOT_NSEC=your_private_key npm start
+cd /home/server/bots/LIT_Bot/BoostAfterBoost
+npm start
 ```
 
 ### Environment Variables Needed
 ```bash
 # Required
-LIT_BOT_NSEC=your_private_key  # Your LIT Bot Nostr private key
+NOSTR_NSEC=your_nostr_private_key  # Your Nostr private key
+
+# IRC Configuration (pre-configured)
+IRC_SERVER=irc.zeronode.net
+IRC_PORT=6667
+IRC_CHANNEL=#BowlAfterBowl
+IRC_NICKNAME=BoostAfterBoost_Reader
+TARGET_BOT=BoostAfterBoost
 
 # Optional
 PORT=3334              # Default port
-TEST_MODE=true         # For testing without posting
+TEST_MODE=false        # Set to true for testing without posting
 ```
 
 ### Checking Bot Status
 ```bash
 # Check if bot is running
-ps aux | grep -v grep | grep lit-bot
-
-# Check what's using port 3334
-lsof -i :3334
+ps aux | grep -v grep | grep boost-after-boost
 
 # Health check
 curl http://localhost:3334/health
@@ -65,28 +64,25 @@ curl http://localhost:3334/status
 ### Stopping the Bot
 ```bash
 # Find running processes
-ps aux | grep -v grep | grep lit-bot
+ps aux | grep -v grep | grep boost-after-boost
 
 # Kill specific processes (replace PID with actual process ID)
 kill [PID]
-
-# Or kill all lit-bot processes
-pkill -f lit-bot
 ```
 
 ## Important Notes
-- **Separate Account**: Uses different Nostr account than BoostBot
-- **Port 3334**: Runs on different port to avoid conflicts
-- **PodPing Only**: Only monitors PodPing, no webhook integration
-- **Live Focus**: Only posts when shows go live (reason=live)
-- **Real-time**: Near-instant notifications via Hive blockchain monitoring
+- **Read-only IRC**: Bot never posts to IRC, only monitors
+- **Single channel**: Only connects to #BowlAfterBowl
+- **Specific bot monitoring**: Only processes BoostAfterBoost messages
+- **Nostr forwarding**: All monitored messages forwarded to Nostr
+- **Port 3334**: Runs on separate port to avoid conflicts
 
 ## Development Workflow
 
 ### Safe Development Process
-1. **Test Mode**: Set `TEST_MODE=true` to log without posting
-2. **Monitor Logs**: Watch console for PodPing events
-3. **Test with Live Shows**: Verify notifications work
+1. **Test Mode**: Set `TEST_MODE=true` to log without posting to Nostr
+2. **Monitor Logs**: Watch console for IRC messages
+3. **Test with Live Messages**: Verify forwarding works
 
 ### Test Mode Setup
 ```bash
@@ -94,23 +90,20 @@ pkill -f lit-bot
 export TEST_MODE=true
 
 # Start bot in test mode
-TEST_MODE=true PORT=3334 LIT_BOT_NSEC=your_private_key npm start
+TEST_MODE=true npm start
 ```
 
 ### Post Format
-When a show goes live, LIT_Bot posts:
+When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 ```
-🔴 LIVE NOW!
+[Original message from BoostAfterBoost]
 
-🎧 [Show Title]
-📻 Tune in now: [Feed URL]
-
-#LivePodcast #PC20 #PodPing
+#BowlAfterBowl #BoostAfterBoost
 ```
 
 ## Technical Details
-- **Hive Monitoring**: Streams operations from Hive blockchain
-- **Operation Filtering**: Looks for custom_json with id='podping'
-- **Live Detection**: Checks for reason='live' in PodPing data
-- **Title Extraction**: Basic URL parsing to extract show names
-- **Duplicate Prevention**: Tracks processed operations to avoid reposts
+- **IRC Monitoring**: Connects to single channel and filters by bot name
+- **Message Filtering**: Only processes messages from BoostAfterBoost
+- **Nostr Publishing**: Direct message forwarding with hashtags
+- **Duplicate Prevention**: Basic message handling to avoid spam
+- **Health Endpoints**: /health and /status for monitoring
