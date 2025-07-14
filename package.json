@@ -4,10 +4,22 @@
   "description": "BoostAfterBoost - IRC to Nostr bridge for BowlAfterBowl channel",
   "main": "boost-after-boost.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "start": "tsx boost-after-boost.js",
-    "dev": "tsx --watch boost-after-boost.js",
-    "health": "curl -s --max-time 5 http://localhost:3334/health || echo 'Bot is not running'",
+    "start": "node boost-after-boost.js",
+    "dev": "node --watch boost-after-boost.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop BoostAfterBoost",
+    "pm2:restart": "pm2 restart BoostAfterBoost",
+    "pm2:delete": "pm2 delete BoostAfterBoost",
+    "pm2:logs": "pm2 logs BoostAfterBoost",
+    "pm2:monit": "pm2 monit",
+    "setup-service": "./setup-service.sh",
+    "health": "curl -s --max-time 5 http://localhost:3335/health || echo 'Bot is not running'",
+    "status": "curl -s http://localhost:3335/status",
+    "validate": "node -e \"import('./boost-after-boost.js')\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
