@@ -95,6 +95,7 @@ kill [PID]
 - **Nostr forwarding**: All monitored messages forwarded to Nostr
 - **Port 3335**: Runs on separate port to avoid conflicts
 - **Auto-recovery**: Bot automatically restarts ZNC if it stops
+- **SSL Configuration**: Accepts self-signed certificates for ZNC connection
 
 ## ZNC Configuration
 - **Config Location**: `/home/server/.znc/configs/znc.conf`
@@ -134,3 +135,12 @@ When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 - **Nostr Publishing**: Direct message forwarding with hashtags
 - **Duplicate Prevention**: Basic message handling to avoid spam
 - **Health Endpoints**: /health and /status for monitoring
+- **SSL/TLS**: Configured to accept self-signed certificates from ZNC bouncer
+
+## Current Status (Updated 2025-07-15)
+- **Bot Status**: ✅ Running and operational
+- **IRC Connection**: ✅ Connected to ZNC bouncer via SSL
+- **Channel Monitoring**: ✅ Monitoring #BowlAfterBowl for BoostAfterBoost messages
+- **Nostr Configuration**: ✅ Configured with 4 default relays
+- **Recent Fix**: SSL certificate validation issue resolved
+- **Ready to Forward**: Bot will automatically forward BoostAfterBoost messages to Nostr
