@@ -44,7 +44,7 @@ The bot now includes automatic ZNC recovery:
 ## ZNC Configuration
 - **Config**: `/home/server/.znc/configs/znc.conf`
 - **User**: `ircbots`
-- **Password**: `bassist89`
+- **Password**: `[see .env file IRC_PASSWORD]`
 - **Network**: `zeronode` (irc.zeronode.net)
 - **Channel**: `#BowlAfterBowl`
 - **Port**: 6697 (SSL)
