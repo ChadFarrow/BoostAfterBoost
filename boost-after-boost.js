@@ -204,7 +204,7 @@ class BoostAfterBoostBridge {
       }
 
       this._initializeNostrClient();
-      this._initializeIRCClient();
+      await this._initializeIRCClient();
       this._startWebServer();
       
       logger.info('🚀 BoostAfterBoost bridge started successfully');
@@ -228,14 +228,14 @@ class BoostAfterBoostBridge {
     }
   }
 
-  _initializeIRCClient() {
+  async _initializeIRCClient() {
     try {
       this.ircClient = new IRCClient(this.config.irc);
       
       // Enhanced message handler with error catching
       const originalConnect = this.ircClient.connect.bind(this.ircClient);
-      this.ircClient.connect = () => {
-        originalConnect();
+      this.ircClient.connect = async () => {
+        await originalConnect();
         
         if (this.ircClient.client) {
           this.ircClient.client.on('message', async (from, to, message) => {
@@ -250,7 +250,7 @@ class BoostAfterBoostBridge {
         }
       };
       
-      this.ircClient.connect();
+      await this.ircClient.connect();
     } catch (error) {
       logger.error('❌ Failed to initialize IRC client:', error);
       throw error;

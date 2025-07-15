@@ -8,9 +8,11 @@
 
 ## Bot Configuration
 - **Read-only IRC**: Only monitors messages, never posts to IRC
+- **Uses ZNC bouncer**: Connects through ZNC on localhost:6697 for reliability
 - **Monitors specific bot**: Only processes messages from BoostAfterBoost bot
 - **Posts to Nostr**: Forwards monitored messages to Nostr relays
-- **Runs on port 3334**: Separate from other bots
+- **Runs on port 3335**: Separate from other bots
+- **Auto-recovery**: Automatically restarts ZNC if it stops
 
 ## Nostr Configuration
 - **Environment Variable**: `NOSTR_NSEC`
@@ -28,8 +30,23 @@
 
 ### Starting the Bot
 ```bash
-cd /home/server/bots/LIT_Bot/BoostAfterBoost
-npm start
+cd /home/server/bots/BoostAfterBoost
+pm2 start ecosystem.config.cjs
+```
+
+### ZNC Management
+```bash
+# Check if ZNC is running
+nc -zv localhost 6697
+
+# Start ZNC manually
+/home/server/bots/BoostAfterBoost/start-znc.sh
+
+# Start ZNC directly
+znc --datadir=/home/server/.znc &
+
+# Check ZNC status
+ps aux | grep znc
 ```
 
 ### Environment Variables Needed
@@ -72,10 +89,20 @@ kill [PID]
 
 ## Important Notes
 - **Read-only IRC**: Bot never posts to IRC, only monitors
+- **ZNC Dependency**: Requires ZNC bouncer running on localhost:6697
 - **Single channel**: Only connects to #BowlAfterBowl
 - **Specific bot monitoring**: Only processes BoostAfterBoost messages
 - **Nostr forwarding**: All monitored messages forwarded to Nostr
-- **Port 3334**: Runs on separate port to avoid conflicts
+- **Port 3335**: Runs on separate port to avoid conflicts
+- **Auto-recovery**: Bot automatically restarts ZNC if it stops
+
+## ZNC Configuration
+- **Config Location**: `/home/server/.znc/configs/znc.conf`
+- **User**: `ircbots`
+- **Password**: `bassist89`
+- **Network**: `zeronode` (connects to irc.zeronode.net)
+- **Channel**: `#BowlAfterBowl`
+- **Port**: 6697 (SSL)
 
 ## Development Workflow
 
