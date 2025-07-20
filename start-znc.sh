@@ -3,7 +3,7 @@
 # This script ensures ZNC is always running for IRC connections
 
 ZNC_DATADIR="/home/server/.znc"
-ZNC_PIDFILE="/tmp/znc.pid"
+ZNC_PIDFILE="/tmp/znc-boostbot.pid"
 ZNC_LOGFILE="/home/server/bots/BoostAfterBoost/logs/znc.log"
 
 # Function to check if ZNC is running
