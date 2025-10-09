@@ -319,11 +319,11 @@ class BoostAfterBoostBridge {
     });
 
     app.get('/health', (req, res) => {
-      const healthy = this.ircClient?.connected && this.nostrClient;
+      const healthy = this.ircClient?.isConnected && this.nostrClient;
       res.status(healthy ? 200 : 503).json({
         status: healthy ? 'healthy' : 'unhealthy',
         uptime: process.uptime(),
-        connected: this.ircClient?.connected || false,
+        connected: this.ircClient?.isConnected || false,
         timestamp: new Date().toISOString()
       });
     });
@@ -334,7 +334,7 @@ class BoostAfterBoostBridge {
         ...this.stats,
         uptime: uptimeSeconds,
         irc: {
-          connected: this.ircClient?.connected || false,
+          connected: this.ircClient?.isConnected || false,
           server: this.config.irc.server,
           channels: this.config.irc.channels,
           monitoring: this.config.app.targetBot
