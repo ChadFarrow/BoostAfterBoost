@@ -289,8 +289,9 @@ class BoostAfterBoostBridge {
       }
 
       const tags = [['r', `irc://${this.config.irc.server}/${this.config.irc.channels[0]}`]];
-      
-      const result = await this.nostrClient.publishMessage(sanitizedMessage, tags);
+
+      const contentWithHashtags = sanitizedMessage + '\n\n#bowlafterbowl #boostafterboost #bowloftrust';
+      const result = await this.nostrClient.publishMessage(contentWithHashtags, tags);
       
       if (result.success) {
         this.stats.successfulPosts++;
