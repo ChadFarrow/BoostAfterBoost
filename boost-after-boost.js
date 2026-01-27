@@ -121,6 +121,7 @@ class NostrClient {
       tags: [
         ['t', 'bowlafterbowl'],
         ['t', 'boostafterboost'],
+        ['t', 'bowloftrust'],
         ...tags
       ],
       created_at: Math.floor(Date.now() / 1000),
