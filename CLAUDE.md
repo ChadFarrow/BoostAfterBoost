@@ -144,3 +144,6 @@ When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 - **Nostr Configuration**: ✅ Configured with 4 default relays
 - **Recent Fix**: SSL certificate validation issue resolved
 - **Ready to Forward**: Bot will automatically forward BoostAfterBoost messages to Nostr
+
+## Recent Fixes (July 10, 2026)
+- **node-icu log spam**: Removed the `encoding: 'utf8'` option from the `irc.Client` config in `lib/irc-client.js`. That option makes the `irc` library `require('node-icu-charset-detector')` (an uninstalled native module) on every incoming message; combined with `debug: true` it logged a `Cannot find module 'node-icu-charset-detector'` ERROR per message, flooding the journal. This bot is read-only and ZeroNode is UTF-8, so default decoding is correct and no charset detection is needed. (LIT_Bot has the same `encoding: 'utf8'` but `debug: false`, so it never surfaced the error.)
