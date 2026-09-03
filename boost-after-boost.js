@@ -5,6 +5,7 @@ import { finalizeEvent, nip19 } from 'nostr-tools';
 import { Relay } from 'nostr-tools/relay';
 import { logger } from './lib/logger.js';
 import { IRCClient } from './lib/irc-client.js';
+import { podcastTagsForMessage } from './podcast-tags.js';
 
 // Configure environment variables
 dotenv.config();
@@ -289,6 +290,10 @@ class BoostAfterBoostBridge {
       }
 
       const tags = [['r', `irc://${this.config.irc.server}/${this.config.irc.channels[0]}`]];
+
+      // NIP-73 feed identifier, when the show name resolves unambiguously.
+      // Returns [] on anything doubtful, so the post is never held up or skipped.
+      tags.push(...await podcastTagsForMessage(sanitizedMessage, { logger }));
 
       const contentWithHashtags = sanitizedMessage + '\n\n#bowlafterbowl #boostafterboost #bowloftrust';
       const result = await this.nostrClient.publishMessage(contentWithHashtags, tags);
