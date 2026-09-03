@@ -16,7 +16,8 @@
 
 ## Nostr Configuration
 - **Environment Variable**: `NOSTR_NSEC`
-- **Default Relays**: relay.damus.io, relay.nostr.band, nostr.mom, relay.primal.net
+- **Default Relays**: relay.damus.io, nos.lol, nostr.mom, relay.primal.net
+  (relay.nostr.band was removed: it resolves but TCP 443 never opens from this host)
 - **Post Format**: Direct message forwarding with BowlAfterBowl hashtags
 
 ## Key Features
@@ -30,8 +31,7 @@
 
 ### Starting the Bot
 ```bash
-cd /home/server/bots/BoostAfterBoost
-pm2 start ecosystem.config.cjs
+sudo systemctl start boostafterboost     # systemd owns this service
 ```
 
 ### ZNC Management
@@ -40,7 +40,7 @@ pm2 start ecosystem.config.cjs
 nc -zv localhost 6697
 
 # Start ZNC manually
-/home/server/bots/BoostAfterBoost/start-znc.sh
+/home/server/BoostAfterBoost/start-znc.sh
 
 # Start ZNC directly
 znc --datadir=/home/server/.znc &
@@ -62,7 +62,7 @@ IRC_NICKNAME=BoostAfterBoost_Reader
 TARGET_BOT=BoostAfterBoost
 
 # Optional
-PORT=3334              # Default port
+PORT=3335              # Default port
 TEST_MODE=false        # Set to true for testing without posting
 ```
 
@@ -72,19 +72,16 @@ TEST_MODE=false        # Set to true for testing without posting
 ps aux | grep -v grep | grep boost-after-boost
 
 # Health check
-curl http://localhost:3334/health
+curl http://localhost:3335/health
 
 # Status info
-curl http://localhost:3334/status
+curl http://localhost:3335/status
 ```
 
 ### Stopping the Bot
 ```bash
-# Find running processes
-ps aux | grep -v grep | grep boost-after-boost
-
-# Kill specific processes (replace PID with actual process ID)
-kill [PID]
+sudo systemctl stop boostafterboost
+# Do NOT pkill it: systemd Restart=always will bring it straight back.
 ```
 
 ## Important Notes
@@ -137,13 +134,28 @@ When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 - **Health Endpoints**: /health and /status for monitoring
 - **SSL/TLS**: Configured to accept self-signed certificates from ZNC bouncer
 
-## Current Status (Updated 2025-07-15)
+## Current Status (Updated 2026-09-03)
 - **Bot Status**: ✅ Running and operational
 - **IRC Connection**: ✅ Connected to ZNC bouncer via SSL
 - **Channel Monitoring**: ✅ Monitoring #BowlAfterBowl for BoostAfterBoost messages
-- **Nostr Configuration**: ✅ Configured with 4 default relays
+- **Nostr Configuration**: ✅ 5 relays via NOSTR_RELAYS in .env (overrides the code default)
 - **Recent Fix**: SSL certificate validation issue resolved
 - **Ready to Forward**: Bot will automatically forward BoostAfterBoost messages to Nostr
 
 ## Recent Fixes (July 10, 2026)
 - **node-icu log spam**: Removed the `encoding: 'utf8'` option from the `irc.Client` config in `lib/irc-client.js`. That option makes the `irc` library `require('node-icu-charset-detector')` (an uninstalled native module) on every incoming message; combined with `debug: true` it logged a `Cannot find module 'node-icu-charset-detector'` ERROR per message, flooding the journal. This bot is read-only and ZeroNode is UTF-8, so default decoding is correct and no charset detection is needed. (LIT_Bot has the same `encoding: 'utf8'` but `debug: false`, so it never surfaced the error.)
+
+## NIP-73 podcast tags
+`podcast-tags.js` resolves the show name in `[SHOW] [EPISODE]` to a feed GUID via
+Podcast Index and adds `["i","podcast:guid:<guid>"]` + `["k","podcast:guid"]`.
+
+It emits a tag **only** when a title search returns exactly one exact match. Two
+different feeds are both titled exactly "Stay Awhile" with different GUIDs, so
+anything looser publishes a wrong identifier — worse than publishing none, since
+a wrong id mis-aggregates across every client reading these tags.
+
+There is never a `podcast:item:guid`: the relayed text carries no episode identity.
+
+`PODCAST_INDEX_API_KEY`/`SECRET` are optional. Without them the bot posts exactly
+as before, untagged. The lookup has a 5s timeout and cannot throw, so a failure
+means an untagged post, never a late or dropped one.
