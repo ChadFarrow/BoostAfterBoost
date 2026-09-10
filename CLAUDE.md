@@ -8,11 +8,12 @@
 
 ## Bot Configuration
 - **Read-only IRC**: Only monitors messages, never posts to IRC
-- **Uses ZNC bouncer**: Connects through ZNC on localhost:6697 for reliability
+- **Uses ZNC bouncer**: Connects to the `znc` container on the compose bridge network,
+  which shares one ZeroNode connection with the other two bots
 - **Monitors specific bot**: Only processes messages from BoostAfterBoost bot
 - **Posts to Nostr**: Forwards monitored messages to Nostr relays
-- **Runs on port 3335**: Separate from other bots
-- **Auto-recovery**: Automatically restarts ZNC if it stops
+- **Runs on port 3335**: Published on loopback only; separate from LIT_Bot (3334) and LibreRelayBot (3336)
+- **Auto-recovery**: Handled by the container restart policy
 
 ## Nostr Configuration
 - **Environment Variable**: `NOSTR_NSEC`
@@ -31,22 +32,19 @@
 
 ### Starting the Bot
 ```bash
-sudo systemctl start boostafterboost     # systemd owns this service
+ssh root@104.237.150.197 'cd /opt/bots && docker compose up -d boost-after-boost'
 ```
+Deployed from the `thelounge-candr` repo: `./deploy-bots.sh 104.237.150.197`.
 
 ### ZNC Management
+ZNC is a sibling container, managed from the stack — never from this bot:
 ```bash
-# Check if ZNC is running
-nc -zv localhost 6697
+ssh root@104.237.150.197 'cd /opt/bots && docker compose ps znc'
+ssh root@104.237.150.197 'docker logs --tail 50 znc'
+ssh root@104.237.150.197 'cd /opt/bots && docker compose restart znc'
 
-# Start ZNC manually
-/home/server/BoostAfterBoost/start-znc.sh
-
-# Start ZNC directly
-znc --datadir=/home/server/.znc &
-
-# Check ZNC status
-ps aux | grep znc
+# one upstream, three attached clients -- from your own IRC client:
+#   /msg *status ListClients
 ```
 
 ### Environment Variables Needed
@@ -54,9 +52,11 @@ ps aux | grep znc
 # Required
 NOSTR_NSEC=your_nostr_private_key  # Your Nostr private key
 
-# IRC Configuration (pre-configured)
-IRC_SERVER=irc.zeronode.net
+# IRC Configuration (set in bots/docker-compose.yml)
+IRC_SERVER=znc            # the ZNC container, not ZeroNode directly
 IRC_PORT=6667
+IRC_SECURE=false
+IRC_PASSWORD=ircbots@bab/zeronode:<znc password>   # clientid form; from env/bab.env
 IRC_CHANNEL=#BowlAfterBowl
 IRC_NICKNAME=BoostAfterBoost_Reader
 TARGET_BOT=BoostAfterBoost
@@ -69,9 +69,9 @@ TEST_MODE=false        # Set to true for testing without posting
 ### Checking Bot Status
 ```bash
 # Check if bot is running
-ps aux | grep -v grep | grep boost-after-boost
+ssh root@104.237.150.197 'cd /opt/bots && docker compose ps boost-after-boost'
 
-# Health check
+# Health check (published on loopback only)
 curl http://localhost:3335/health
 
 # Status info
@@ -80,27 +80,46 @@ curl http://localhost:3335/status
 
 ### Stopping the Bot
 ```bash
-sudo systemctl stop boostafterboost
-# Do NOT pkill it: systemd Restart=always will bring it straight back.
+ssh root@104.237.150.197 'cd /opt/bots && docker compose stop boost-after-boost'
+# Do NOT docker kill it: restart: unless-stopped brings it straight back.
 ```
 
 ## Important Notes
 - **Read-only IRC**: Bot never posts to IRC, only monitors
-- **ZNC Dependency**: Requires ZNC bouncer running on localhost:6697
+- **ZNC Dependency**: Requires the `znc` container in the same compose stack, reached as host `znc` port 6667
 - **Single channel**: Only connects to #BowlAfterBowl
 - **Specific bot monitoring**: Only processes BoostAfterBoost messages
 - **Nostr forwarding**: All monitored messages forwarded to Nostr
 - **Port 3335**: Runs on separate port to avoid conflicts
-- **Auto-recovery**: Bot automatically restarts ZNC if it stops
-- **SSL Configuration**: Accepts self-signed certificates for ZNC connection
+- **Auto-recovery**: `restart: unless-stopped` on both containers. The bot no longer
+  tries to start ZNC itself — that code shelled out to a path on the old host.
 
 ## ZNC Configuration
-- **Config Location**: `/home/server/.znc/configs/znc.conf`
-- **User**: `ircbots`
-- **Password**: `bassist89`
-- **Network**: `zeronode` (connects to irc.zeronode.net)
-- **Channel**: `#BowlAfterBowl`
-- **Port**: 6697 (SSL)
+ZNC is a container in the `/opt/bots` stack on the candr VPS, shared with LIT_Bot and
+LibreRelayBot. It is **not** this bot's responsibility — the container runtime's
+restart policy owns its lifecycle.
+
+- **Config**: `/opt/bots/znc-data/configs/znc.conf` (template in `thelounge-candr/bots/`)
+- **User**: `ircbots`, network `zeronode` → `irc.zeronode.net`
+- **Password**: not recorded here. It lives in `/opt/bots/env/bab.env` as
+  `IRC_PASSWORD=ircbots@bab/zeronode:<password>`, mode 600, and nowhere in git.
+- **Reached as**: host `znc`, port 6667, plaintext — the compose bridge network only
+- **Channels**: the union of all three bots' needs, `#BowlAfterBowl` among them
+
+### Why a shared ZNC
+
+ZeroNode enforces a per-IP connection limit and the old Ubuntu host hit it, dropping
+connections. ZNC opens **one** upstream connection per (user, network) and lets
+several clients attach at once, sharing the connection and the nick. This bot is
+read-only, so sharing LIT_Bot's nick is invisible to the network. Three ZeroNode
+connections became one.
+
+The `@bab` clientid in `IRC_PASSWORD` is what makes this bot a distinct ZNC client
+rather than three sessions fighting over one.
+
+**ZNC buffers are zero on purpose.** This bot dedupes in memory only — it keeps no
+state across restarts — so a buffer replay on reattach would republish old boosts to
+Nostr as brand-new notes.
 
 ## Development Workflow
 
@@ -159,3 +178,34 @@ There is never a `podcast:item:guid`: the relayed text carries no episode identi
 `PODCAST_INDEX_API_KEY`/`SECRET` are optional. Without them the bot posts exactly
 as before, untagged. The lookup has a 5s timeout and cannot throw, so a failure
 means an untagged post, never a late or dropped one.
+
+## Migration to the candr VPS (September 2026)
+
+Moved off the local Ubuntu server (`/home/server/BoostAfterBoost`, systemd + ZNC on
+the host) to the candr VPS as a container in the `/opt/bots` stack.
+
+**Why:** the home IP had hit ZeroNode's per-IP connection limit and connections were
+being dropped. Moving sheds this bot's connection from that IP, and the shared ZNC on
+the VPS means all three bots together cost the new IP one connection, not three.
+
+**What changed in this repo:**
+- `Dockerfile` + `.dockerignore`. Two stages so `build-essential`/`python3` — needed
+  for `irc`'s optional native deps — don't ship in the runtime image. Runs as the
+  `node` user (uid 1000), matching the other containers on the box.
+- `lib/irc-client.js`: deleted the ZNC health-check and auto-restart block. It
+  `execAsync`'d `/home/server/bots/BoostAfterBoost/start-znc.sh`, a path that does
+  not exist on the VPS, and probed a hardcoded `localhost:6697` that is now the
+  wrong host and port. The call site was already commented out, so this was dead
+  code carrying a stale host assumption. The container restart policy owns ZNC now.
+- `start-znc.sh`: deleted. All three bot repos shipped a byte-identical copy writing
+  the same `/tmp/znc-boostbot.pid` and the same log path — they would have fought
+  each other.
+- `PORT` default 3334 → **3335**, matching the docs, `package.json` scripts and
+  compose. The old default disagreed with all three and collided with LIT_Bot. The
+  pm2 config said 3336, which collided with LibreRelayBot; also fixed.
+- The ZNC password was committed in cleartext in this file. It has been removed and
+  should be rotated — note that removing it here does not remove it from git history.
+
+**Rollback:** `ecosystem.config.cjs` and the pm2 scripts are deliberately left in
+place. The old host can take this bot back with `pm2 start ecosystem.config.cjs`
+(or its systemd unit) once `IRC_SERVER`/`IRC_PORT` point back at a local ZNC.

@@ -30,7 +30,10 @@ class Config {
     };
     
     this.app = {
-      port: this.parsePort(process.env.PORT) || 3334,
+      // 3335 is this bot's port everywhere else (docs, package.json scripts,
+      // compose). The old 3334 default disagreed with all of them and collided
+      // with LIT_Bot.
+      port: this.parsePort(process.env.PORT) || 3335,
       testMode: process.env.TEST_MODE === 'true',
       targetBot: process.env.TARGET_BOT || 'BoostAfterBoost'
     };
