@@ -145,17 +145,36 @@ When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 ## Recent Fixes (July 10, 2026)
 - **node-icu log spam**: Removed the `encoding: 'utf8'` option from the `irc.Client` config in `lib/irc-client.js`. That option makes the `irc` library `require('node-icu-charset-detector')` (an uninstalled native module) on every incoming message; combined with `debug: true` it logged a `Cannot find module 'node-icu-charset-detector'` ERROR per message, flooding the journal. This bot is read-only and ZeroNode is UTF-8, so default decoding is correct and no charset detection is needed. (LIT_Bot has the same `encoding: 'utf8'` but `debug: false`, so it never surfaced the error.)
 
-## NIP-73 podcast tags
-`podcast-tags.js` resolves the show name in `[SHOW] [EPISODE]` to a feed GUID via
-Podcast Index and adds `["i","podcast:guid:<guid>"]` + `["k","podcast:guid"]`.
+## NIP-73 podcast tags and boost evidence
+`podcast-tags.js` parses the IRC line (`parseBoost`: show, episode, sender, sats,
+position, app) and builds the event's tags (`buildBoostTags`):
 
-It emits a tag **only** when a title search returns exactly one exact match. Two
-different feeds are both titled exactly "Stay Awhile" with different GUIDs, so
-anything looser publishes a wrong identifier — worse than publishing none, since
-a wrong id mis-aggregates across every client reading these tags.
+- `["i","podcast:guid:<guid>"]` + `["k","podcast:guid"]` when the show title
+  matches exactly one Podcast Index feed. Two different feeds are both titled
+  exactly "Stay Awhile" with different GUIDs, so anything looser publishes a
+  wrong identifier — worse than publishing none, since a wrong id mis-aggregates
+  across every client reading these tags.
+- `["i","podcast:item:guid:<guid>"]` + `["k","podcast:item:guid"]` when that
+  feed's episode list (`episodes/bypodcastguid`) has exactly one episode with the
+  bracketed title. Scoped to the resolved feed, so it is a narrow question where
+  a global episode-title search would be a guess. A live-show title matches
+  nothing and the boost stays show-level. Misses are cached for 15 minutes, not
+  forever: Podcast Index can lag the feed.
+- `["amount","<millisats>"]` plus `["t","boost"]`, `["t","boostagram"]`,
+  `["t","value4value"]` when the line says `boosted N sats`. **These are what
+  make the note a boost to an indexer.** OnlyBoosts and similar keep a note only
+  on evidence (an amount tag, a boost topic tag, or a quoted zap receipt); a
+  keysend has no zap receipt to quote, so the amount from the line is the
+  evidence this relay can give. A continuation line of a long message is not a
+  boost and gets none of these.
+- `["app","<App>"]` from the trailing `via <App>`: the app the listener boosted
+  from. `["client","BoostAfterBoost"]` on every event is the relay itself; the
+  two are different claims and stay in different tags.
 
-There is never a `podcast:item:guid`: the relayed text carries no episode identity.
+Tags are read from the RAW IRC line, before the 280-character content cut, so
+the trailing app survives a long message.
 
-`PODCAST_INDEX_API_KEY`/`SECRET` are optional. Without them the bot posts exactly
-as before, untagged. The lookup has a 5s timeout and cannot throw, so a failure
-means an untagged post, never a late or dropped one.
+`PODCAST_INDEX_API_KEY`/`SECRET` are optional and gate only the two identifier
+lookups. Each has a 5s timeout and cannot throw, so a failure means fewer tags,
+never a late or dropped post. `npm test` runs the parser and tag builder against
+real IRC lines.
