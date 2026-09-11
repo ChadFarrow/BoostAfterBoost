@@ -21,7 +21,13 @@ class Config {
       userName: process.env.IRC_USERNAME || 'boost_reader',
       realName: process.env.IRC_REALNAME || 'BoostAfterBoost Reader Bot',
       password: process.env.IRC_PASSWORD,
-      channels: [process.env.IRC_CHANNEL || '#BowlAfterBowl']
+      channels: [process.env.IRC_CHANNEL || '#BowlAfterBowl'],
+      // The IRC network these messages actually appeared on, for the `r`
+      // provenance tag. Deliberately NOT `server`: that is the bouncer we read
+      // through -- `znc` on the compose bridge, `localhost` on the old host --
+      // and publishing either puts a name that resolves nowhere into a permanent,
+      // public note. The bouncer is transport; the network is the identity.
+      networkHost: process.env.IRC_NETWORK_HOST || 'irc.zeronode.net'
     };
     
     this.nostr = {
@@ -308,7 +314,7 @@ class BoostAfterBoostBridge {
         return;
       }
 
-      const tags = [['r', `irc://${this.config.irc.server}/${this.config.irc.channels[0]}`]];
+      const tags = [['r', `irc://${this.config.irc.networkHost}/${this.config.irc.channels[0]}`]];
 
       // NIP-73 feed identifier, when the show name resolves unambiguously.
       // Returns [] on anything doubtful, so the post is never held up or skipped.
