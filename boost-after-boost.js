@@ -21,7 +21,13 @@ class Config {
       userName: process.env.IRC_USERNAME || 'boost_reader',
       realName: process.env.IRC_REALNAME || 'BoostAfterBoost Reader Bot',
       password: process.env.IRC_PASSWORD,
-      channels: [process.env.IRC_CHANNEL || '#BowlAfterBowl']
+      channels: [process.env.IRC_CHANNEL || '#BowlAfterBowl'],
+      // The IRC network these messages actually appeared on, for the `r`
+      // provenance tag. Deliberately NOT `server`: that is the bouncer we read
+      // through -- `znc` on the compose bridge, `localhost` on the old host --
+      // and publishing either puts a name that resolves nowhere into a permanent,
+      // public note. The bouncer is transport; the network is the identity.
+      networkHost: process.env.IRC_NETWORK_HOST || 'irc.zeronode.net'
     };
     
     this.nostr = {
@@ -30,7 +36,10 @@ class Config {
     };
     
     this.app = {
-      port: this.parsePort(process.env.PORT) || 3334,
+      // 3335 is this bot's port everywhere else (docs, package.json scripts,
+      // compose). The old 3334 default disagreed with all of them and collided
+      // with LIT_Bot.
+      port: this.parsePort(process.env.PORT) || 3335,
       testMode: process.env.TEST_MODE === 'true',
       targetBot: process.env.TARGET_BOT || 'BoostAfterBoost'
     };
@@ -269,6 +278,22 @@ class BoostAfterBoostBridge {
       return;
     }
 
+    // ...and only in the channel this bot actually watches.
+    //
+    // Going through the shared ZNC, channel membership belongs to the ZNC *user*,
+    // not to each attached client: every channel the bouncer joined is fanned out
+    // to all three bots regardless of what any of them JOINed. So IRC_CHANNEL no
+    // longer scopes what we receive and `to` is the only thing that still does.
+    // Without this check, a target-bot message in any other channel gets relayed
+    // and then tagged with channels[0] in _postToNostr -- i.e. published under a
+    // channel it was never said in. Separate connections used to make this
+    // impossible; the ZNC consolidation is what put it in reach.
+    const watching = this.config.irc.channels[0];
+    if (String(to).toLowerCase() !== String(watching).toLowerCase()) {
+      logger.debug(`Ignoring ${from} message in ${to} (watching ${watching})`);
+      return;
+    }
+
     logger.info(`📨 Message from ${from}:`, message);
     this.stats.messagesMonitored++;
     this.stats.lastActivity = new Date();
@@ -293,7 +318,7 @@ class BoostAfterBoostBridge {
         return;
       }
 
-      const tags = [['r', `irc://${this.config.irc.server}/${this.config.irc.channels[0]}`]];
+      const tags = [['r', `irc://${this.config.irc.networkHost}/${this.config.irc.channels[0]}`]];
 
       // NIP-73 feed and item identifiers when they resolve unambiguously, plus
       // the amount and topic tags that mark the note as a boost. Read from the
