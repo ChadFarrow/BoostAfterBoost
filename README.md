@@ -9,6 +9,7 @@ BoostAfterBoost monitors messages from the BoostAfterBoost bot in the #BowlAfter
 - 📱 **Nostr Integration** - Forwards all monitored messages to Nostr
 - 🛡️ **Single Channel Focus** - Dedicated to #BowlAfterBowl channel only
 - ⚡ **Real-time Forwarding** - Messages appear on Nostr immediately
+- 🏷️ **Boost Tags** - Each boost carries NIP-73 show and episode identifiers, its amount in millisats, the boost topic tags, and the app it was sent from, so boost indexers count it
 - 🔧 **Easy Setup** - Simple configuration with environment variables
 
 ## Quick Start
@@ -77,8 +78,22 @@ When BoostAfterBoost posts to IRC, the bot forwards to Nostr:
 ```
 [Original message from BoostAfterBoost]
 
-#BowlAfterBowl #BoostAfterBoost
+#bowlafterbowl #boostafterboost #bowloftrust
 ```
+
+Tags on the event, for a line like `🎳 [Show] [Episode] Alice boosted 333 sats saying "hi" @0:10:36 via Fountain`:
+
+| Tag | Value | When |
+|---|---|---|
+| `client` | `BoostAfterBoost` | always: the software that published the note |
+| `t` | `bowlafterbowl`, `boostafterboost`, `bowloftrust` | always |
+| `i` + `k` | `podcast:guid:<feed guid>` | the show title matches exactly one Podcast Index feed |
+| `i` + `k` | `podcast:item:guid:<item guid>` | that feed has exactly one episode with the bracketed title |
+| `amount` | `333000` (millisats) | the line says `boosted N sats` |
+| `t` | `boost`, `boostagram`, `value4value` | same: the note is a boost |
+| `app` | `Fountain` | the line ends `via <App>`: the app the listener boosted from |
+
+The identifiers are only ever emitted on an exact, unambiguous match; anything doubtful posts without them. The `amount` and topic tags are what a boost indexer needs to count the note at all, and they need no API key.
 
 ## Commands
 

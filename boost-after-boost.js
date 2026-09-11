@@ -5,7 +5,7 @@ import { finalizeEvent, nip19 } from 'nostr-tools';
 import { Relay } from 'nostr-tools/relay';
 import { logger } from './lib/logger.js';
 import { IRCClient } from './lib/irc-client.js';
-import { podcastTagsForMessage } from './podcast-tags.js';
+import { boostTagsForMessage } from './podcast-tags.js';
 
 // Configure environment variables
 dotenv.config();
@@ -132,6 +132,10 @@ class NostrClient {
         ['t', 'bowlafterbowl'],
         ['t', 'boostafterboost'],
         ['t', 'bowloftrust'],
+        // NIP-89: the software that published this note. Indexers attribute a
+        // note to its publisher; the app the listener boosted FROM rides the
+        // `app` tag the boost parser adds, so the two are never confused.
+        ['client', 'BoostAfterBoost'],
         ...tags
       ],
       created_at: Math.floor(Date.now() / 1000),
@@ -316,9 +320,12 @@ class BoostAfterBoostBridge {
 
       const tags = [['r', `irc://${this.config.irc.networkHost}/${this.config.irc.channels[0]}`]];
 
-      // NIP-73 feed identifier, when the show name resolves unambiguously.
-      // Returns [] on anything doubtful, so the post is never held up or skipped.
-      tags.push(...await podcastTagsForMessage(sanitizedMessage, { logger }));
+      // NIP-73 feed and item identifiers when they resolve unambiguously, plus
+      // the amount and topic tags that mark the note as a boost. Read from the
+      // RAW line: the published content is cut at 280 characters, and the app
+      // name sits at the end. Returns [] on anything doubtful, so the post is
+      // never held up or skipped.
+      tags.push(...await boostTagsForMessage(message, { logger }));
 
       const contentWithHashtags = sanitizedMessage + '\n\n#bowlafterbowl #boostafterboost #bowloftrust';
       const result = await this.nostrClient.publishMessage(contentWithHashtags, tags);
