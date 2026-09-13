@@ -190,13 +190,47 @@ position, app) and builds the event's tags (`buildBoostTags`):
   from. `["client","BoostAfterBoost"]` on every event is the relay itself; the
   two are different claims and stay in different tags.
 
-Tags are read from the RAW IRC line, before the 280-character content cut, so
-the trailing app survives a long message.
+Tags are read from the RAW reassembled message rather than the sanitized one, so
+the trailing `via <App>` survives -- it arrives in the LAST IRC line of a long
+boost (see "Rejoining split IRC lines" below).
 
 `PODCAST_INDEX_API_KEY`/`SECRET` are optional and gate only the two identifier
 lookups. Each has a 5s timeout and cannot throw, so a failure means fewer tags,
 never a late or dropped post. `npm test` runs the parser and tag builder against
 real IRC lines.
+
+## Rejoining split IRC lines
+
+IRC has no long messages: the announcer emits a long boost as two or three lines,
+and this bot used to publish each one as its own Nostr note. One boost became three
+permanent, unconnected notes, and only the last carried the `via <App>` the tags are
+read from.
+
+`lib/message-assembler.js` buffers them. `parseBoost(line) !== null` decides which
+lines begin a message; anything else continues the one in progress. A message is
+published when the next one starts, when `IRC_JOIN_WINDOW_MS` (default 2500) passes
+with no further line, or at shutdown.
+
+**Fragments are joined with no separator, before sanitizing.** The cut is a character
+count, not a word boundary -- a real boost split mid-npub, `…uyt0uyg` + `gwmf4q78…`
+being one 63-character key -- so a space in the join corrupts it. And a cut that does
+land on a space leaves that space at the end of a fragment, which `sanitizeMessage`'s
+`.trim()` would eat if it ran first. `test/message-assembler.test.js` pins both
+against the real 2026-09-13 boost.
+
+Two consequences elsewhere:
+
+- **No 280-character cut.** `Security.sanitizeMessage` no longer truncates. Cutting
+  there would discard most of what the reassembly just recovered, and a kind:1 note
+  has no such limit.
+- **The rate limiter counts messages, not fragments.** At 5 per 60s a three-line
+  boost spent three of the five, so a busy show dropped boosts -- and dropping a
+  *middle* fragment published a note with a hole in it. It now runs once per
+  assembled message, in `_handleAssembledMessage`.
+
+A line the predicate does not recognise, with nothing pending, is published on its
+own exactly as before, so a miss degrades to the old behaviour rather than gluing
+unrelated messages together.
 
 ## Migration to the candr VPS (September 2026)
 

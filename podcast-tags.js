@@ -68,10 +68,15 @@ const VIA = /^.*\s+via\s+(\S.*?)\s*$/su;
 const POSITION = /@(\d+:\d\d(?::\d\d)?)\b/u;
 
 /**
- * The boost an IRC line describes, or null when the line is not a boost (a
- * continuation of a long message, for instance). Read from the RAW line, before
- * the published content is truncated, so the app at the end survives even when
- * the message does not.
+ * The boost a message describes, or null when it is not a boost (a continuation
+ * of a long message, for instance). Read from the RAW text, before sanitizing, so
+ * the trailing app survives.
+ *
+ * This doubles as the assembler's "does this line START a message?" predicate
+ * (lib/message-assembler.js), which is why the null case matters as much as the
+ * parse. Loosen it so that a continuation line parses as a boost and a long boost
+ * splits back into several notes; tighten it so that a real head line does not,
+ * and that boost publishes as fragments again.
  */
 export function parseBoost(message) {
   if (typeof message !== 'string') return null;
