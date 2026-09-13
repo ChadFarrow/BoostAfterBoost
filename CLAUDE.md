@@ -232,6 +232,32 @@ A line the predicate does not recognise, with nothing pending, is published on i
 own exactly as before, so a miss degrades to the old behaviour rather than gluing
 unrelated messages together.
 
+## Names, not npubs (`lib/npub-names.js`)
+
+A payer writes "@Frankie Peroni" in their app and the app stores a key, so the
+boostagram that reaches IRC says `nostr:npub1cpd59…suul0rk`. Some clients resolve
+that back to a name and some do not, and none of them can resolve a bare `npub1…`
+with no `nostr:` in front of it. So the bot looks the name up itself — `kind:0`
+from the relays it already publishes to — and the note says `@Frankie Peroni`.
+
+**The match counts to 58, it does not scan a character class.** An npub is `npub1`
+plus exactly 58 bech32 characters, and boostagram text runs mentions together with
+what follows: `…suul0rknostr:npub1…`, because the sending app dropped the newline
+between two mentions. A greedy `[charset]+` match swallows the `n` of the next
+`nostr:` and breaks the key it just read.
+
+Everything about it degrades quietly. A slow relay, a profile with no name, a key
+that fails its checksum: the npub is left exactly where it was and the note still
+publishes. Names are cached (6h for a hit, 15min for a miss) so a boost storm asks
+once, and a name is stripped of control characters and capped at 64 characters
+before it goes anywhere near a note — it is a stranger's profile field.
+
+No `p` tag is emitted for a resolved key, deliberately. The message is written by
+whoever paid, so a `p` would let anyone put this bot's signed note into a
+stranger's mentions, permanently.
+
+`RESOLVE_NPUB_NAMES=false` publishes the raw key instead.
+
 ## Migration to the candr VPS (September 2026)
 
 Moved off the local Ubuntu server (`/home/server/BoostAfterBoost`, systemd + ZNC on

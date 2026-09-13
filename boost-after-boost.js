@@ -7,6 +7,7 @@ import { logger } from './lib/logger.js';
 import { IRCClient } from './lib/irc-client.js';
 import { boostTagsForMessage, parseBoost } from './podcast-tags.js';
 import { MessageAssembler } from './lib/message-assembler.js';
+import { resolveNpubNames } from './lib/npub-names.js';
 
 // Configure environment variables
 dotenv.config();
@@ -42,7 +43,13 @@ class Config {
       // with LIT_Bot.
       port: this.parsePort(process.env.PORT) || 3335,
       testMode: process.env.TEST_MODE === 'true',
-      targetBot: process.env.TARGET_BOT || 'BoostAfterBoost'
+      targetBot: process.env.TARGET_BOT || 'BoostAfterBoost',
+      // A payer's app stores their mentions as keys, so the boostagram says
+      // nostr:npub1… where they typed "@Frankie Peroni". Off by `false` only;
+      // the note reads better with names and falls back to the npub on any
+      // failure. See lib/npub-names.js.
+      resolveNpubs: process.env.RESOLVE_NPUB_NAMES !== 'false',
+      npubTimeoutMs: Number(process.env.NPUB_RESOLVE_TIMEOUT_MS) || 4000
     };
   }
 
@@ -335,7 +342,17 @@ class BoostAfterBoostBridge {
 
   async _postToNostr(message) {
     try {
-      const sanitizedMessage = Security.sanitizeMessage(message);
+      // Names before sanitizing, tags from the raw line below. A relay that is slow
+      // or a profile with no name leaves the npub exactly where it was.
+      const named = this.config.app.resolveNpubs
+        ? await resolveNpubNames(message, {
+            relays: this.config.nostr.relays,
+            timeoutMs: this.config.app.npubTimeoutMs,
+            logger
+          })
+        : message;
+
+      const sanitizedMessage = Security.sanitizeMessage(named);
       if (!sanitizedMessage) {
         logger.warn('Empty message after sanitization, skipping');
         return;
