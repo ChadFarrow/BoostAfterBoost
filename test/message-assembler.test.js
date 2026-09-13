@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageAssembler } from '../lib/message-assembler.js';
 import { parseBoost } from '../podcast-tags.js';
+import { nip19 } from 'nostr-tools';
 
 // The real #BowlAfterBowl boost that published as three separate Nostr notes on
 // 2026-09-13: Aaron of Essex, 666 sats, Homegrown Hits Episode 150. Zero-width
@@ -66,6 +67,13 @@ test('the npub split across the first cut is rejoined intact', () => {
   const npub = h.texts()[0].match(/npub1[023456789acdefghjklmnpqrstuvwxyz]+/)[0];
   assert.equal(npub, 'npub1cpd59nd6d5m42vta49lv8jnj8u5t4708h3a9uyt0uyggwmf4q78suul0rk');
   assert.equal(npub.length, 63, 'an npub is 63 characters; a separator in the join breaks it');
+
+  // The decisive check: bech32 carries a checksum, so this only decodes if the two
+  // halves were rejoined byte for byte. Anything inserted at the seam fails here.
+  assert.equal(
+    nip19.decode(npub).data,
+    'c05b42cdba6d3755317da97ec3ca723f28baf9e7bc7a5e116fe110876d35078f',
+  );
 });
 
 test('a cut that lands on a space keeps exactly one space', () => {
