@@ -1,5 +1,10 @@
 # BoostAfterBoost - IRC to Nostr Bridge
 
+> **Archived 2026-09-13 — this code moved.** It now lives in
+> [ChadFarrow/thelounge-candr](https://github.com/ChadFarrow/thelounge-candr) under
+> `bots/src/boost-after-boost`, and is built and deployed from there. Make changes there, not here.
+> This repository is kept read-only for its history.
+
 BoostAfterBoost monitors messages from the BoostAfterBoost bot in the #BowlAfterBowl IRC channel and forwards them to Nostr.
 
 ## Features
