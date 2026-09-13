@@ -190,13 +190,73 @@ position, app) and builds the event's tags (`buildBoostTags`):
   from. `["client","BoostAfterBoost"]` on every event is the relay itself; the
   two are different claims and stay in different tags.
 
-Tags are read from the RAW IRC line, before the 280-character content cut, so
-the trailing app survives a long message.
+Tags are read from the RAW reassembled message rather than the sanitized one, so
+the trailing `via <App>` survives -- it arrives in the LAST IRC line of a long
+boost (see "Rejoining split IRC lines" below).
 
 `PODCAST_INDEX_API_KEY`/`SECRET` are optional and gate only the two identifier
 lookups. Each has a 5s timeout and cannot throw, so a failure means fewer tags,
 never a late or dropped post. `npm test` runs the parser and tag builder against
 real IRC lines.
+
+## Rejoining split IRC lines
+
+IRC has no long messages: the announcer emits a long boost as two or three lines,
+and this bot used to publish each one as its own Nostr note. One boost became three
+permanent, unconnected notes, and only the last carried the `via <App>` the tags are
+read from.
+
+`lib/message-assembler.js` buffers them. `parseBoost(line) !== null` decides which
+lines begin a message; anything else continues the one in progress. A message is
+published when the next one starts, when `IRC_JOIN_WINDOW_MS` (default 2500) passes
+with no further line, or at shutdown.
+
+**Fragments are joined with no separator, before sanitizing.** The cut is a character
+count, not a word boundary -- a real boost split mid-npub, `…uyt0uyg` + `gwmf4q78…`
+being one 63-character key -- so a space in the join corrupts it. And a cut that does
+land on a space leaves that space at the end of a fragment, which `sanitizeMessage`'s
+`.trim()` would eat if it ran first. `test/message-assembler.test.js` pins both
+against the real 2026-09-13 boost.
+
+Two consequences elsewhere:
+
+- **No 280-character cut.** `Security.sanitizeMessage` no longer truncates. Cutting
+  there would discard most of what the reassembly just recovered, and a kind:1 note
+  has no such limit.
+- **The rate limiter counts messages, not fragments.** At 5 per 60s a three-line
+  boost spent three of the five, so a busy show dropped boosts -- and dropping a
+  *middle* fragment published a note with a hole in it. It now runs once per
+  assembled message, in `_handleAssembledMessage`.
+
+A line the predicate does not recognise, with nothing pending, is published on its
+own exactly as before, so a miss degrades to the old behaviour rather than gluing
+unrelated messages together.
+
+## Names, not npubs (`lib/npub-names.js`)
+
+A payer writes "@Frankie Peroni" in their app and the app stores a key, so the
+boostagram that reaches IRC says `nostr:npub1cpd59…suul0rk`. Some clients resolve
+that back to a name and some do not, and none of them can resolve a bare `npub1…`
+with no `nostr:` in front of it. So the bot looks the name up itself — `kind:0`
+from the relays it already publishes to — and the note says `@Frankie Peroni`.
+
+**The match counts to 58, it does not scan a character class.** An npub is `npub1`
+plus exactly 58 bech32 characters, and boostagram text runs mentions together with
+what follows: `…suul0rknostr:npub1…`, because the sending app dropped the newline
+between two mentions. A greedy `[charset]+` match swallows the `n` of the next
+`nostr:` and breaks the key it just read.
+
+Everything about it degrades quietly. A slow relay, a profile with no name, a key
+that fails its checksum: the npub is left exactly where it was and the note still
+publishes. Names are cached (6h for a hit, 15min for a miss) so a boost storm asks
+once, and a name is stripped of control characters and capped at 64 characters
+before it goes anywhere near a note — it is a stranger's profile field.
+
+No `p` tag is emitted for a resolved key, deliberately. The message is written by
+whoever paid, so a `p` would let anyone put this bot's signed note into a
+stranger's mentions, permanently.
+
+`RESOLVE_NPUB_NAMES=false` publishes the raw key instead.
 
 ## Migration to the candr VPS (September 2026)
 

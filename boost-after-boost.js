@@ -5,7 +5,9 @@ import { finalizeEvent, nip19 } from 'nostr-tools';
 import { Relay } from 'nostr-tools/relay';
 import { logger } from './lib/logger.js';
 import { IRCClient } from './lib/irc-client.js';
-import { boostTagsForMessage } from './podcast-tags.js';
+import { boostTagsForMessage, parseBoost } from './podcast-tags.js';
+import { MessageAssembler } from './lib/message-assembler.js';
+import { resolveNpubNames } from './lib/npub-names.js';
 
 // Configure environment variables
 dotenv.config();
@@ -41,7 +43,13 @@ class Config {
       // with LIT_Bot.
       port: this.parsePort(process.env.PORT) || 3335,
       testMode: process.env.TEST_MODE === 'true',
-      targetBot: process.env.TARGET_BOT || 'BoostAfterBoost'
+      targetBot: process.env.TARGET_BOT || 'BoostAfterBoost',
+      // A payer's app stores their mentions as keys, so the boostagram says
+      // nostr:npub1… where they typed "@Frankie Peroni". Off by `false` only;
+      // the note reads better with names and falls back to the npub on any
+      // failure. See lib/npub-names.js.
+      resolveNpubs: process.env.RESOLVE_NPUB_NAMES !== 'false',
+      npubTimeoutMs: Number(process.env.NPUB_RESOLVE_TIMEOUT_MS) || 4000
     };
   }
 
@@ -73,10 +81,13 @@ class Config {
 class Security {
   static sanitizeMessage(message) {
     if (typeof message !== 'string') return '';
+    // No length cut. A long boost reaches us as several IRC lines and is rejoined
+    // before it gets here (lib/message-assembler.js); cutting at 280 characters
+    // would throw away most of what the reassembly just recovered, and a kind:1
+    // note has no such limit. The announcer bounds what it emits.
     return message
       .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
-      .trim()
-      .substring(0, 280); // Limit message length
+      .trim();
   }
 
   static createRateLimiter(maxRequests = 5, windowMs = 60000) {
@@ -181,6 +192,17 @@ class BoostAfterBoostBridge {
     this.ircClient = null;
     this.nostrClient = null;
     this.rateLimiter = Security.createRateLimiter(5, 60000);
+    // One boost, one note. The announcer cuts a long boost across several IRC lines
+    // and each line used to become its own permanent Nostr note -- see
+    // lib/message-assembler.js for why they are rejoined with no separator.
+    this.assembler = new MessageAssembler({
+      // parseBoost already answers exactly this question: null for a continuation
+      // line, a parsed boost for the line that starts one.
+      isStart: (line) => parseBoost(line) !== null,
+      windowMs: Number(process.env.IRC_JOIN_WINDOW_MS) || undefined,
+      logger,
+      onMessage: (message) => this._handleAssembledMessage(message)
+    });
     this._setupGlobalErrorHandlers();
   }
 
@@ -298,13 +320,21 @@ class BoostAfterBoostBridge {
     this.stats.messagesMonitored++;
     this.stats.lastActivity = new Date();
 
-    // Rate limiting
+    // Buffered, not posted. A long boost arrives as several lines and only becomes
+    // a message once the assembler decides it is complete.
+    this.assembler.push(message);
+  }
+
+  async _handleAssembledMessage(message) {
+    // Rate limit the assembled boost, never the fragment. At 5 per 60s a
+    // three-line boost spent three of the five, so a busy show dropped boosts --
+    // and dropping a MIDDLE fragment published a note with a hole in it.
+    const from = this.config.app.targetBot;
     if (!this.rateLimiter(from)) {
       logger.warn(`⚠️ Rate limit exceeded for ${from}`);
       return;
     }
 
-    // Post to Nostr
     if (this.nostrClient) {
       await this._postToNostr(message);
     }
@@ -312,7 +342,17 @@ class BoostAfterBoostBridge {
 
   async _postToNostr(message) {
     try {
-      const sanitizedMessage = Security.sanitizeMessage(message);
+      // Names before sanitizing, tags from the raw line below. A relay that is slow
+      // or a profile with no name leaves the npub exactly where it was.
+      const named = this.config.app.resolveNpubs
+        ? await resolveNpubNames(message, {
+            relays: this.config.nostr.relays,
+            timeoutMs: this.config.app.npubTimeoutMs,
+            logger
+          })
+        : message;
+
+      const sanitizedMessage = Security.sanitizeMessage(named);
       if (!sanitizedMessage) {
         logger.warn('Empty message after sanitization, skipping');
         return;
@@ -321,10 +361,11 @@ class BoostAfterBoostBridge {
       const tags = [['r', `irc://${this.config.irc.networkHost}/${this.config.irc.channels[0]}`]];
 
       // NIP-73 feed and item identifiers when they resolve unambiguously, plus
-      // the amount and topic tags that mark the note as a boost. Read from the
-      // RAW line: the published content is cut at 280 characters, and the app
-      // name sits at the end. Returns [] on anything doubtful, so the post is
-      // never held up or skipped.
+      // the amount and topic tags that mark the note as a boost. Read from the RAW
+      // assembled message rather than the sanitized one, so the trailing `via <App>`
+      // survives -- it sits in the LAST IRC line of a long boost, which is only
+      // present at all because the fragments were rejoined. Returns [] on anything
+      // doubtful, so the post is never held up or skipped.
       tags.push(...await boostTagsForMessage(message, { logger }));
 
       const contentWithHashtags = sanitizedMessage + '\n\n#bowlafterbowl #boostafterboost #bowloftrust';
@@ -371,6 +412,7 @@ class BoostAfterBoostBridge {
       const uptimeSeconds = Math.floor((Date.now() - this.stats.startTime) / 1000);
       res.json({
         ...this.stats,
+        ...this.assembler.getStats(),
         uptime: uptimeSeconds,
         irc: {
           connected: this.ircClient?.isConnected || false,
@@ -395,7 +437,13 @@ class BoostAfterBoostBridge {
 
   _gracefulShutdown(exitCode = 0) {
     logger.info('🛑 Shutting down gracefully...');
-    
+
+    // Publish a half-assembled boost rather than losing it.
+    if (this.assembler) {
+      this.assembler.flush('shutdown');
+      this.assembler.stop();
+    }
+
     if (this.ircClient) {
       try {
         this.ircClient.disconnect();
